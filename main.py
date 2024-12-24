@@ -1,201 +1,140 @@
-import tkinter as tk
-from tkinter import ttk
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import numpy as np
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d.art3d import Line3DCollection
-import copy
+from mpl_toolkits.mplot3d import Axes3D
 
-# Ваш список точек
-points = [
-    [-2, 4, 0], [-2,4,1], [1,4,0], [1,4,1], [2,3,0],
-    [2,3,1], [3,1,0], [3,1,1], [3,-1,0], [3,-1,1],
-    [2,-3,0], [2,-3,1], [1,-4,0], [1,-4,1], [-2,-4,0],
-    [-2,-4,1], [-1,3,0], [-1,3,1], [-1,-3,0], [-1,-3,1],
-    [1,3,0], [1,3,1], [1,-3,0], [1,-3,1], [2,1,0],
-    [2,1,1], [2,-1,0], [2,-1,1]
+
+class Object3D:
+    def __init__(self, vertices, edges):
+        self.vertices = np.array(vertices)
+        self.edges = edges
+
+    def transform(self, matrix):
+        homogenous_vertices = np.hstack((self.vertices, np.ones((self.vertices.shape[0], 1))))
+        transformed_vertices = np.dot(homogenous_vertices, matrix.T)
+        self.vertices = transformed_vertices[:, :3]
+        return matrix
+
+    def plot(self, ax, color='blue', show_vertices=True):
+        for edge in self.edges:
+            x = [self.vertices[edge[0]][0], self.vertices[edge[1]][0]]
+            y = [self.vertices[edge[0]][1], self.vertices[edge[1]][1]]
+            z = [self.vertices[edge[0]][2], self.vertices[edge[1]][2]]
+            ax.plot(x, y, z, color=color)
+
+        if show_vertices:
+            ax.scatter(self.vertices[:, 0], self.vertices[:, 1], self.vertices[:, 2], color='red')
+
+
+vertices = [
+    [0, 0, 0], [0, 5, 0], [3, 5, 0], [3, 2, 0], [1, 2, 0], [1, 0, 0], [1, 3, 0], [1, 4, 0], [2, 4, 0], [2, 3, 0],
 ]
 
-connections = [
-    (0, 1), (2, 3), (4, 5), (6, 7), (8, 9), (10, 11),
-    (12, 13), (14, 15), (16, 17), (18, 19), (20, 21),
-    (22, 23), (24, 25), (26, 27),
-
-    (0, 2), (1, 3), (4, 6), (5, 7),
-    (0, 14), (1, 15), (14, 12), (15, 13),
-    (12, 10), (13, 11), (10, 8), (11, 9),
-    (8, 6), (9, 7), (4, 2), (5, 3),
-    (16, 20), (17, 21), (20, 24), (21, 25),
-    (24, 26), (25, 27), (26, 22), (27, 23),
-    (22, 18), (23, 19), (18, 16), (19, 17)
-    # и т.д.
+edges = [
+    [0, 1], [1, 2], [ 2, 3], [3, 4], [4, 5], [5, 0], [6, 7], [7, 8], [8, 9], [9, 6],
 ]
 
-class PointApp:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("3D Points Viewer")
+letter_ch = Object3D(vertices, edges)
 
-        # Сохранение оригинальных точек для сброса
-        self.original_points = copy.deepcopy(points)
-        self.current_points = copy.deepcopy(points)
 
-        # Инициализация трансформаций
-        self.scale_factor = 1.0
-        self.shift_x_total = 0.0
-        self.shift_y_total = 0.0
-        self.shift_z_total = 0.0
-        self.current_projection = None
+def scale_matrix(sx, sy, sz):
+    return np.array([
+        [sx, 0, 0, 0],
+        [0, sy, 0, 0],
+        [0, 0, sz, 0],
+        [0, 0, 0, 1]
+    ])
 
-        # Создание фигуры matplotlib
-        self.fig = plt.Figure(figsize=(8, 6))
-        self.ax = self.fig.add_subplot(111, projection='3d')
 
-        # Встраивание фигуры в Tkinter
-        self.canvas = FigureCanvasTkAgg(self.fig, master=root)
-        self.canvas.draw()
-        self.canvas.get_tk_widget().grid(row=0, column=0, columnspan=7)
+def translate_matrix(tx, ty, tz):
+    return np.array([
+        [1, 0, 0, tx],
+        [0, 1, 0, ty],
+        [0, 0, 1, tz],
+        [0, 0, 0, 1]
+    ])
 
-        # Инициализация объектов для точек и линий
-        self.scatter = self.ax.scatter([], [], [], c='b', s=50, label='Точки')
-        self.line_collection = Line3DCollection([], colors='r', label='Соединения')
-        self.ax.add_collection3d(self.line_collection)
 
-        # Добавление легенды
-        self.ax.legend(loc='upper left')
+def rotate_matrix_x(angle):
+    c, s = np.cos(angle), np.sin(angle)
+    return np.array([
+        [1, 0, 0, 0],
+        [0, c, -s, 0],
+        [0, s, c, 0],
+        [0, 0, 0, 1]
+    ])
 
-        # Первоначальная отрисовка
-        self.plot_points()
 
-        # Элементы управления для сдвига
-        tk.Label(root, text="Сдвиг по X:").grid(row=1, column=0, padx=5, pady=5, sticky='e')
-        self.shift_x = tk.DoubleVar()
-        tk.Entry(root, textvariable=self.shift_x).grid(row=1, column=1, padx=5, pady=5)
+def rotate_matrix_y(angle):
+    c, s = np.cos(angle), np.sin(angle)
+    return np.array([
+        [c, 0, s, 0],
+        [0, 1, 0, 0],
+        [-s, 0, c, 0],
+        [0, 0, 0, 1]
+    ])
 
-        tk.Label(root, text="Сдвиг по Y:").grid(row=2, column=0, padx=5, pady=5, sticky='e')
-        self.shift_y = tk.DoubleVar()
-        tk.Entry(root, textvariable=self.shift_y).grid(row=2, column=1, padx=5, pady=5)
 
-        tk.Label(root, text="Сдвиг по Z:").grid(row=3, column=0, padx=5, pady=5, sticky='e')
-        self.shift_z = tk.DoubleVar()
-        tk.Entry(root, textvariable=self.shift_z).grid(row=3, column=1, padx=5, pady=5)
+def rotate_matrix_z(angle):
+    c, s = np.cos(angle), np.sin(angle)
+    return np.array([
+        [c, -s, 0, 0],
+        [s, c, 0, 0],
+        [0, 0, 1, 0],
+        [0, 0, 0, 1]
+    ])
 
-        tk.Button(root, text="Применить сдвиг", command=self.apply_shift).grid(row=1, column=2, padx=5, pady=5)
 
-        # Кнопки для отображения проекций
-        tk.Button(root, text="Проекция на плоскость YZ", command=self.project_yz).grid(row=2, column=2, padx=5, pady=5)
-        tk.Button(root, text="Проекция на плоскость XZ", command=self.project_xz).grid(row=3, column=2, padx=5, pady=5)
-        tk.Button(root, text="Проекция на плоскость XY", command=self.project_xy).grid(row=4, column=2, padx=5, pady=5)
+def plot_projections_with_edges(obj):
+    fig, axs = plt.subplots(1, 3, figsize=(18, 6))
 
-        # Кнопка для сброса изменений
-        tk.Button(root, text="Сбросить", command=self.reset).grid(row=1, column=3, rowspan=1, padx=5, pady=5)
+    for edge in obj.edges:
+        x = [obj.vertices[edge[0]][0], obj.vertices[edge[1]][0]]
+        y = [obj.vertices[edge[0]][1], obj.vertices[edge[1]][1]]
+        axs[0].plot(x, y, color='blue')
+    axs[0].scatter(obj.vertices[:, 0], obj.vertices[:, 1], color='red')  # Вершины
+    axs[0].set_title("Проекция на плоскость Oxy")
+    axs[0].set_xlabel("X")
+    axs[0].set_ylabel("Y")
+    axs[0].grid()
 
-        # Кнопки для масштабирования
-        tk.Button(root, text="Масштабировать +", command=self.scale_up).grid(row=2, column=3, padx=5, pady=5)
-        tk.Button(root, text="Масштабировать -", command=self.scale_down).grid(row=3, column=3, padx=5, pady=5)
+    for edge in obj.edges:
+        x = [obj.vertices[edge[0]][0], obj.vertices[edge[1]][0]]
+        z = [obj.vertices[edge[0]][2], obj.vertices[edge[1]][2]]
+        axs[1].plot(x, z, color='green')
+    axs[1].scatter(obj.vertices[:, 0], obj.vertices[:, 2], color='red')  # Вершины
+    axs[1].set_title("Проекция на плоскость Oxz")
+    axs[1].set_xlabel("X")
+    axs[1].set_ylabel("Z")
+    axs[1].grid()
 
-    def plot_points(self):
-        """Отображение точек и соединений на 3D графике с учётом всех трансформаций."""
-        self.ax.clear()
-        # Настройка осей
-        self.ax.set_xlabel('X')
-        self.ax.set_ylabel('Y')
-        self.ax.set_zlabel('Z')
+    for edge in obj.edges:
+        y = [obj.vertices[edge[0]][1], obj.vertices[edge[1]][1]]
+        z = [obj.vertices[edge[0]][2], obj.vertices[edge[1]][2]]
+        axs[2].plot(y, z, color='red')
+    axs[2].scatter(obj.vertices[:, 1], obj.vertices[:, 2], color='red')  # Вершины
+    axs[2].set_title("Проекция на плоскость Oyz")
+    axs[2].set_xlabel("Y")
+    axs[2].set_ylabel("Z")
+    axs[2].grid()
 
-        # Применение трансформаций к оригинальным точкам
-        transformed_points = copy.deepcopy(self.original_points)
+    plt.tight_layout()
+    plt.show()
 
-        # Применение масштабирования
-        transformed_points = [[x * self.scale_factor, y * self.scale_factor, z * self.scale_factor] for x, y, z in transformed_points]
 
-        # Применение сдвига
-        transformed_points = [[x + self.shift_x_total, y + self.shift_y_total, z + self.shift_z_total] for x, y, z in transformed_points]
+fig = plt.figure(figsize=(10, 10))
+ax = fig.add_subplot(111, projection='3d')
+letter_ch.plot(ax)
+ax.set_xlabel("X")
+ax.set_ylabel("Y")
+ax.set_zlabel("Z")
+plt.title("3D-модель буквы 'P'")
+plt.show()
 
-        # Применение проекций
-        if self.current_projection == 'yz':
-            transformed_points = [[0, y, z] for x, y, z in transformed_points]
-        elif self.current_projection == 'xz':
-            transformed_points = [[x, 0, z] for x, y, z in transformed_points]
-        elif self.current_projection == 'xy':
-            transformed_points = [[x, y, 0] for x, y, z in transformed_points]
+scale = letter_ch.transform(scale_matrix(1.5, 1.5, 1.5))
+translate = letter_ch.transform(translate_matrix(1, 1, 0))
+rotate = letter_ch.transform(rotate_matrix_z(np.pi / 4))
 
-        self.current_points = transformed_points
+print("Итоговая матрица преобразований:")
+print(rotate)
 
-        # Извлечение координат
-        if self.current_points:
-            x, y, z = zip(*self.current_points)
-            self.scatter = self.ax.scatter(x, y, z, c='b', s=50, label='Точки')
-
-        # Создание списка линий
-        lines = []
-        for conn in connections:
-            start_idx, end_idx = conn
-            try:
-                start_point = self.current_points[start_idx]
-                end_point = self.current_points[end_idx]
-                lines.append([start_point, end_point])
-            except IndexError:
-                print(f"Ошибка: Индекс соединения {conn} выходит за пределы списка точек.")
-
-        # Создание Line3DCollection
-        self.line_collection = Line3DCollection(lines, colors='r', linewidths=1)
-        self.ax.add_collection3d(self.line_collection)
-
-        # Установка границ осей для лучшего отображения
-        self.ax.set_xlim([-10, 10])
-        self.ax.set_ylim([-10, 10])
-        self.ax.set_zlim([-10, 10])
-
-        # Добавление легенды
-        self.ax.legend(['Точки', 'Соединения'], loc='upper left')
-
-        self.canvas.draw_idle()
-
-    def apply_shift(self):
-        """Применение сдвига ко всем точкам."""
-        dx = self.shift_x.get()
-        dy = self.shift_y.get()
-        dz = self.shift_z.get()
-        self.shift_x_total += dx
-        self.shift_y_total += dy
-        self.shift_z_total += dz
-        self.plot_points()
-
-    def project_yz(self):
-        """Отображение проекции на плоскость YZ (X=0)."""
-        self.current_projection = 'yz'
-        self.plot_points()
-
-    def project_xz(self):
-        """Отображение проекции на плоскость XZ (Y=0)."""
-        self.current_projection = 'xz'
-        self.plot_points()
-
-    def project_xy(self):
-        """Отображение проекции на плоскость XY (Z=0)."""
-        self.current_projection = 'xy'
-        self.plot_points()
-
-    def reset(self):
-        """Сброс всех изменений к оригинальным точкам."""
-        self.current_points = copy.deepcopy(self.original_points)
-        self.scale_factor = 1.0
-        self.shift_x_total = 0.0
-        self.shift_y_total = 0.0
-        self.shift_z_total = 0.0
-        self.current_projection = None
-        self.plot_points()
-
-    def scale_up(self):
-        """Увеличение размера модели на 10%."""
-        self.scale_factor *= 1.1
-        self.plot_points()
-
-    def scale_down(self):
-        """Уменьшение размера модели на 10%."""
-        self.scale_factor *= 0.9
-        self.plot_points()
-
-if __name__ == "__main__":
-    root = tk.Tk()
-    app = PointApp(root)
-    root.mainloop()
+plot_projections_with_edges(letter_ch)
